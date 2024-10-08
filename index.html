@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBZ Comic Reader with Overlay Preview</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body { 
+            font-family: 'Azeret Mono', monospace;
+            font-size: 16px;
+            background-color: #1E1E1E;
+            color: #fff;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 40px 20px;
+        }
+
+        .content {
+            flex: 1 0 auto;
+            min-height: 80lvh;
+        }
+
+        .logo svg {
+            fill: #2C2C2C;
+            transition: all .3s ease-in-out;
+            width: 80px;
+        }
+
+        .logo:hover svg {
+            fill: #fff;
+        }
+
+        h1 {
+            font-weight: 700;
+            font-size: 32px;
+            margin: 80px 0 40px 0;
+            text-align: center;
+        }
+
+        .reader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #dropZone {
+            border: 4px dashed #444444;
+            border-radius: 20px;
+            width: 75%;
+            padding-bottom: 95%; /* 16:9 aspect ratio (16/9 * 100) */
+            position: relative; /* To position the content inside */
+            cursor: pointer;
+            transition: all .3s ease-in-out;
+            margin-top: 40px;
+        }
+
+        .dropZoneContent {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%; /* To keep content within the border */
+            height: 100%;
+            pointer-events: none; /* If you want the click to pass through to #dropZone */
+        }
+
+        .reader:hover #dropZone {
+            border: 4px dashed #FFF;
+        }
+        #comicReader {
+            display: none;
+            max-width: 800px;
+            width: 100%;
+            position: relative;
+        }
+        #comicReader img {
+            border-radius: 8px;
+        }
+        #comicImage {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin-bottom: 10px;
+            transition: opacity 0.3s ease;
+            user-select: none;
+        }
+        #navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+
+        button {
+            background-color: #2C2C2C;
+            font-family: 'Azeret Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            text-decoration: none;
+            display: inline-block;
+            padding: 20px 30px;
+            margin: 5px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease-in-out;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+        }
+        .button:hover, button:hover:not(:disabled) { 
+            border: 2px solid #444444;
+         }
+
+        button span {
+            pointer-events: none;
+        }
+
+        #previewPanel {
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 50px;
+            height: 150px;
+            background-color: rgba(255, 255, 255, 0.9);
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 10px;
+            z-index: 10;
+        }
+        .thumbnail {
+            display: inline-block;
+            height: 100%;
+            margin-right: 10px;
+            cursor: pointer;
+            object-fit: contain;
+            border: 2px solid transparent;
+        }
+        .thumbnail.active {
+            border-color: #FFF;
+        }
+        #loadingCircle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: conic-gradient(#444444 0%, #2C2C2C 0%);
+            display: none;
+            margin-top: 20px;
+            position: absolute;
+        }
+        #loadingText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            font-weight: bold;
+        }
+        footer {
+            flex-shrink: 0;
+            border-top: #2C2C2C 1px solid;
+            padding-top: 10px;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-top: 40px;
+        }
+
+        .logo_footer svg {
+        fill: #2C2C2C;
+        width: 40px;
+    }
+
+        footer p {
+            color: #2C2C2C;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a id="logoLink" class="logo" href="https://x-g.ca"><svg viewBox="0 0 117 43" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M31.5588 0H39.3621L27.8032 37.8796H20L31.5588 0ZM108.823 7.41211V11.5891C106.319 8.14923 101.938 6.59308 96.8047 6.59308C89.5857 6.59308 82.3667 10.033 82.3667 19.2879C82.3667 28.5428 89.5857 31.9827 96.8047 31.9827C101.938 31.9827 106.319 30.4266 108.823 26.9867V28.8295C108.823 34.235 105.776 36.0369 99.5171 36.0369C94.76 36.0369 90.1282 35.2588 85.1626 34.2759L84.2444 40.3367C88.7095 41.3605 94.5098 42.3842 101.228 42.3842C111.493 42.3842 116.793 38.4939 116.834 28.9933V7.41211H108.823ZM108.823 19.2879C108.823 23.1373 106.027 25.3486 99.8093 25.3486C93.5918 25.3486 90.7959 23.1373 90.7959 19.2879C90.7959 15.4794 93.5918 13.2271 99.8093 13.2271C106.027 13.2271 108.823 15.4794 108.823 19.2879ZM44.4685 31.737H55.3596L63.2881 23.9153L71.2166 31.737H82.1077L68.5876 19.5745L82.1077 7.41211H71.2166L63.2881 15.2338L55.3596 7.41211H44.4685L57.9885 19.5745L44.4685 31.737ZM7.29492 26.3707L2.8208 22.3233L11.0527 22.3234V20.99H2.82227L7.29492 16.9427L6.2522 16L0 21.6567L6.25293 27.3134L7.29492 26.3707Z"/>
+            </svg></a>
+    </header>
+    <div class="content">
+
+        <div class="reader">
+            <div id="dropZone">
+                <div class="dropZoneContent">Drop CBZ file here or click to select</div>
+            </div>
+            <div id="comicReader">
+                <img id="comicImage" alt="Comic Page">
+                <div id="previewPanel"></div>
+                <div id="navigation">
+                    <button id="prevButton">Previous</button>
+                    <div class="center">
+                        
+                        <button id="previewButton"><span id="pageInfo"></span></button>
+                    </div>
+                    <button id="nextButton">Next</button>
+                </div>
+            </div>
+            <div id="loadingCircle">
+                <div id="loadingText">0%</div>
+            </div>
+        </div>
+    </div>
+    <footer>
+        <a id="footerLogoLink" href="https://x-g.ca" class="logo_footer"><svg viewBox="0 0 97 43" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M88.8226 11.5891V7.4121H96.8345V28.9933C96.7928 38.4939 91.4932 42.3842 81.228 42.3842C74.5097 42.3842 68.7094 41.3605 64.2445 40.3367L65.1625 34.2759C70.1282 35.2588 74.7601 36.0368 79.5171 36.0368C85.7764 36.0368 88.8226 34.235 88.8226 28.8295V26.9867C86.3189 30.4266 81.9374 31.9827 76.8048 31.9827C69.5857 31.9827 62.3667 28.5428 62.3667 19.2879C62.3667 10.033 69.5857 6.59308 76.8048 6.59308C81.9374 6.59308 86.3189 8.14922 88.8226 11.5891ZM79.8092 25.3486C86.0268 25.3486 88.8226 23.1373 88.8226 19.2879C88.8226 15.4794 86.0268 13.2271 79.8092 13.2271C73.5917 13.2271 70.7959 15.4794 70.7959 19.2879C70.7959 23.1373 73.5917 25.3486 79.8092 25.3486Z"/>
+            <path d="M35.3597 31.737H24.4685L37.9886 19.5746L24.4685 7.41211H35.3597L43.2881 15.2337L51.2165 7.41211H62.1077L48.5876 19.5746L62.1077 31.737H51.2165L43.2881 23.9154L35.3597 31.737Z"/>
+            <path d="M11.5588 0H19.362L7.80324 37.8797H0L11.5588 0Z"/>
+            </svg>
+        </a>
+        <p>© Copyright <span id="currentYear"></span>, Xavier Godbout</p>
+    </footer>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        const dropZone = document.getElementById('dropZone');
+        const comicReader = document.getElementById('comicReader');
+        const comicImage = document.getElementById('comicImage');
+        const prevButton = document.getElementById('prevButton');
+        const nextButton = document.getElementById('nextButton');
+        const pageInfo = document.getElementById('pageInfo');
+        const previewButton = document.getElementById('previewButton');
+        const previewPanel = document.getElementById('previewPanel');
+        const loadingCircle = document.getElementById('loadingCircle');
+        const loadingText = document.getElementById('loadingText');
+        const logoLink = document.getElementById('logoLink');
+
+        let images = [];
+        let currentPage = 0;
+        let startX = 0;
+        let endX = 0;
+        let isComicLoaded = false;
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.background = '#e1e1e1';
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.background = '';
+        });
+
+        dropZone.addEventListener('drop', handleFile);
+        dropZone.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.cbz';
+            input.onchange = (e) => handleFile(e);
+            input.click();
+        });
+
+        previewButton.addEventListener('click', togglePreviewPanel);
+
+        previewPanel.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            previewPanel.scrollLeft += e.deltaY;
+        });
+
+        document.addEventListener('click', (e) => {
+            if (previewPanel.style.display === 'block' && !previewPanel.contains(e.target) && e.target !== previewButton) {
+                togglePreviewPanel();
+            }
+        });
+
+        comicImage.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startX = e.clientX;
+        });
+
+        comicImage.addEventListener('mouseup', (e) => {
+            endX = e.clientX;
+            handleSwipe();
+        });
+
+        comicImage.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+        });
+
+        comicImage.addEventListener('touchend', (e) => {
+            endX = e.changedTouches[0].clientX;
+            handleSwipe();
+        });
+
+        function handleSwipe() {
+            if (startX - endX > 50 && currentPage < images.length - 1) {
+                currentPage++;
+                updateReader();
+            } else if (endX - startX > 50 && currentPage > 0) {
+                currentPage--;
+                updateReader();
+            }
+        }
+
+        async function handleFile(e) {
+            e.preventDefault();
+            const file = e.dataTransfer ? e.dataTransfer.files[0] : e.target.files[0];
+            if (file && file.name.endsWith('.cbz')) {
+                loadingCircle.style.display = 'block';
+                images = await extractZip(file);
+                currentPage = 0;
+                updateReader();
+                createThumbnails();
+                dropZone.style.display = 'none';
+                comicReader.style.display = 'block';
+                loadingCircle.style.display = 'none';
+                isComicLoaded = true;
+                updateLogoForComic();
+            }
+        }
+
+        function updateLogoForComic() {
+            if (isComicLoaded) {
+                logoLink.href = "#";
+                logoLink.onclick = (e) => {
+                    e.preventDefault();
+                    comicReader.style.display = 'none';
+                    dropZone.style.display = 'flex';
+                    images = [];
+                    currentPage = 0;
+                    isComicLoaded = false;
+                    logoLink.href = "https://x-g.ca";
+                    logoLink.onclick = null;
+                };
+            }
+        }
+
+        async function extractZip(file) {
+            const zip = new JSZip();
+            const contents = await zip.loadAsync(file);
+            const totalFiles = Object.keys(contents.files).length;
+            let loadedFiles = 0;
+            return await Promise.all(
+                Object.values(contents.files)
+                    .filter(file => file.name.match(/\.(jpe?g|png|gif)$/i))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(async (file) => {
+                        const blob = await file.async('blob');
+                        loadedFiles++;
+                        updateLoadingCircle(loadedFiles, totalFiles);
+                        return URL.createObjectURL(blob);
+                    })
+            );
+        }
+
+        function updateLoadingCircle(loadedFiles, totalFiles) {
+            const progress = (loadedFiles / totalFiles) * 100;
+            loadingCircle.style.background = `conic-gradient(#444444 ${progress}%, #2C2C2C ${progress}%)`;
+            loadingText.textContent = `${Math.round(progress)}%`;
+        }
+
+        function updateReader() {
+            comicImage.src = images[currentPage];
+            pageInfo.textContent = `Page ${currentPage + 1} of ${images.length}`;
+            prevButton.disabled = currentPage === 0;
+            nextButton.disabled = currentPage === images.length - 1;
+            updateActiveThumbnail();
+        }
+
+        function createThumbnails() {
+            previewPanel.innerHTML = '';
+            images.forEach((image, index) => {
+                const thumbnail = document.createElement('img');
+                thumbnail.src = image;
+                thumbnail.classList.add('thumbnail');
+                thumbnail.addEventListener('click', () => {
+                    currentPage = index;
+                    updateReader();
+                    togglePreviewPanel();
+                });
+                previewPanel.appendChild(thumbnail);
+            });
+        }
+
+        function updateActiveThumbnail() {
+            const thumbnails = document.querySelectorAll('.thumbnail');
+            thumbnails.forEach((thumbnail, index) => {
+                if (index === currentPage) {
+                    thumbnail.classList.add('active');
+                } else {
+                    thumbnail.classList.remove('active');
+                }
+            });
+        }
+
+        function togglePreviewPanel() {
+            if (previewPanel.style.display === 'none' || previewPanel.style.display === '') {
+                previewPanel.style.display = 'block';
+                comicImage.style.opacity = '0.3';
+            } else {
+                previewPanel.style.display = 'none';
+                comicImage.style.opacity = '1';
+            }
+        }
+
+        prevButton.addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                updateReader();
+            }
+        });
+
+        nextButton.addEventListener('click', () => {
+            if (currentPage < images.length - 1) {
+                currentPage++;
+                updateReader();
+            }
+        });
+    </script>
+</body>
+</html>
